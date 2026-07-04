@@ -2,9 +2,7 @@ package view;
 
 import controller.DiemSoController;
 import dao.MonHocDAO;
-import dao.SinhVienDAO;
 import model.MonHoc;
-import model.SinhVien;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -19,7 +17,8 @@ public class DiemSoPanel extends JPanel {
     private JTable              table;
     private DefaultTableModel   tableModel;
     private TableRowSorter<DefaultTableModel> sorter;
-    private JComboBox<SinhVien> cmbSinhVien;
+    private JTextField          txtMaSV;
+    private JTextField          txtLanThi;
     private JComboBox<MonHoc>   cmbMonHoc;
     private JTextField          txtDiem;
     private JTextField          txtTimKiem;
@@ -27,7 +26,7 @@ public class DiemSoPanel extends JPanel {
     private DiemSoController    controller;
 
     public DiemSoPanel() {
-        String[] columns = {"Mã điểm", "Mã SV", "Mã MH", "Điểm số", "Xếp loại"};
+        String[] columns = {"Mã điểm", "Mã SV", "Mã MH", "Lần thi", "Điểm số", "Xếp loại"};
         tableModel = new DefaultTableModel(columns, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -42,12 +41,10 @@ public class DiemSoPanel extends JPanel {
         setBackground(new Color(245, 247, 250));
         setBorder(new EmptyBorder(15, 15, 15, 15));
 
-        // ── Tiêu đề ──────────────────────────────────
         JLabel lblTitle = new JLabel("QUẢN LÝ ĐIỂM SỐ");
         lblTitle.setFont(new Font("Arial", Font.BOLD, 18));
         lblTitle.setForeground(new Color(30, 80, 160));
 
-        // ── Thanh tìm kiếm ───────────────────────────
         JPanel topBar = new JPanel(new BorderLayout(10, 0));
         topBar.setBackground(new Color(245, 247, 250));
 
@@ -59,7 +56,6 @@ public class DiemSoPanel extends JPanel {
 
         txtTimKiem = new JTextField(22);
         txtTimKiem.setFont(new Font("Arial", Font.PLAIN, 13));
-        txtTimKiem.setToolTipText("Tìm theo mã SV, mã môn học, xếp loại...");
 
         JButton btnXoaTK = new JButton("X");
         btnXoaTK.setFont(new Font("Arial", Font.BOLD, 12));
@@ -68,7 +64,6 @@ public class DiemSoPanel extends JPanel {
         btnXoaTK.setFocusPainted(false);
         btnXoaTK.setBorderPainted(false);
         btnXoaTK.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btnXoaTK.setToolTipText("Xóa tìm kiếm");
         btnXoaTK.addActionListener(e -> txtTimKiem.setText(""));
 
         lblKetQua = new JLabel("Tổng: 0 bản ghi");
@@ -85,7 +80,6 @@ public class DiemSoPanel extends JPanel {
         topBar.add(searchBar, BorderLayout.CENTER);
         add(topBar, BorderLayout.NORTH);
 
-        // ── Bảng dữ liệu ─────────────────────────────
         table = new JTable(tableModel);
         table.setRowHeight(28);
         table.setFont(new Font("Arial", Font.PLAIN, 13));
@@ -99,52 +93,80 @@ public class DiemSoPanel extends JPanel {
         sorter = new TableRowSorter<>(tableModel);
         table.setRowSorter(sorter);
 
-        // Lắng nghe tìm kiếm real-time
         txtTimKiem.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e)  { applyFilter(); }
             @Override public void removeUpdate(DocumentEvent e)  { applyFilter(); }
             @Override public void changedUpdate(DocumentEvent e) { applyFilter(); }
         });
 
-        // ── Form nhập điểm ───────────────────────────
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int row = table.getSelectedRow();
+                if (row >= 0) {
+                    int mr = table.convertRowIndexToModel(row);
+                    txtMaSV.setText(tableModel.getValueAt(mr, 1).toString());
+                    txtLanThi.setText(tableModel.getValueAt(mr, 3).toString());
+                    String maMH = tableModel.getValueAt(mr, 2).toString();
+                    for (int i = 0; i < cmbMonHoc.getItemCount(); i++) {
+                        if (cmbMonHoc.getItemAt(i).getMaMH().equals(maMH)) {
+                            cmbMonHoc.setSelectedIndex(i); break;
+                        }
+                    }
+                    txtDiem.setText(tableModel.getValueAt(mr, 4).toString());
+                }
+            }
+        });
+
         JPanel formPanel = new JPanel(new GridBagLayout());
         formPanel.setBackground(Color.WHITE);
-        formPanel.setPreferredSize(new Dimension(280, 0));
+        formPanel.setPreferredSize(new Dimension(300, 0));
         formPanel.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(new Color(200, 210, 230)),
-            "Nhập điểm", 0, 0,
+            "Nhập / Sửa điểm", 0, 0,
             new Font("Arial", Font.BOLD, 13), new Color(30, 80, 160)));
 
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(8, 8, 8, 8);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.anchor = GridBagConstraints.WEST;
 
-        cmbSinhVien = new JComboBox<>();
-        new SinhVienDAO().layTatCa().forEach(sv -> cmbSinhVien.addItem(sv));
+        txtMaSV = new JTextField(14);
+        txtMaSV.setFont(new Font("Arial", Font.PLAIN, 13));
+        txtMaSV.setToolTipText("Nhập mã sinh viên (VD: SV001)");
+
+        txtLanThi = new JTextField("1", 14);
+        txtLanThi.setFont(new Font("Arial", Font.PLAIN, 13));
+        txtLanThi.setToolTipText("Lần thi thứ mấy (mặc định: 1)");
 
         cmbMonHoc = new JComboBox<>();
+        cmbMonHoc.setFont(new Font("Arial", Font.PLAIN, 13));
+        cmbMonHoc.setPreferredSize(new Dimension(180, 28));
         new MonHocDAO().layTatCa().forEach(mh -> cmbMonHoc.addItem(mh));
 
-        txtDiem = new JTextField(12);
+        txtDiem = new JTextField(14);
+        txtDiem.setFont(new Font("Arial", Font.PLAIN, 13));
         txtDiem.setToolTipText("Nhập điểm từ 0.0 đến 10.0");
 
-        String[] labels = {"Sinh viên *", "Môn học *", "Điểm số *"};
-        Component[] inputs = {cmbSinhVien, cmbMonHoc, txtDiem};
+        String[] labels = {"Mã SV *", "Lần thi *", "Môn học *", "Điểm số *"};
+        Component[] inputs = {txtMaSV, txtLanThi, cmbMonHoc, txtDiem};
 
         for (int i = 0; i < labels.length; i++) {
-            gbc.gridx = 0; gbc.gridy = i; gbc.weightx = 0;
-            formPanel.add(new JLabel(labels[i]), gbc);
-            gbc.gridx = 1; gbc.weightx = 1;
-            inputs[i].setFont(new Font("Arial", Font.PLAIN, 13));
+            gbc.gridx = 0; gbc.gridy = i; gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+            JLabel lbl = new JLabel(labels[i]);
+            lbl.setFont(new Font("Arial", Font.BOLD, 13));
+            formPanel.add(lbl, gbc);
+
+            gbc.gridx = 1; gbc.weightx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
             formPanel.add(inputs[i], gbc);
         }
 
-        JPanel btnPanel = new JPanel(new GridLayout(1, 2, 6, 6));
+        JPanel btnPanel = new JPanel(new GridLayout(1, 3, 6, 6));
         btnPanel.setBackground(Color.WHITE);
         btnPanel.setBorder(new EmptyBorder(10, 8, 8, 8));
-        JButton btnThem = taoNut("Nhập điểm", new Color(40, 160, 80));
-        JButton btnXoa  = taoNut("Xóa",       new Color(200, 50, 50));
+        JButton btnThem = taoNut("Thêm", new Color(40, 160, 80));
+        JButton btnSua  = taoNut("Sửa",  new Color(30, 120, 200));
+        JButton btnXoa  = taoNut("Xóa",  new Color(200, 50, 50));
         btnPanel.add(btnThem);
+        btnPanel.add(btnSua);
         btnPanel.add(btnXoa);
 
         gbc.gridx = 0; gbc.gridy = labels.length;
@@ -154,15 +176,35 @@ public class DiemSoPanel extends JPanel {
         add(new JScrollPane(table), BorderLayout.CENTER);
         add(formPanel, BorderLayout.EAST);
 
-        // ── Sự kiện nút ──────────────────────────────
         btnThem.addActionListener(e -> {
-            SinhVien sv = (SinhVien) cmbSinhVien.getSelectedItem();
-            MonHoc   mh = (MonHoc)   cmbMonHoc.getSelectedItem();
+            MonHoc mh = (MonHoc) cmbMonHoc.getSelectedItem();
+            int lanThi = 1;
+            try { lanThi = Integer.parseInt(txtLanThi.getText().trim()); }
+            catch (Exception ex) { lanThi = 1; }
             if (controller.nhapDiem(
-                    sv != null ? sv.getMaSV() : null,
+                    txtMaSV.getText().trim(),
+                    mh != null ? mh.getMaMH() : null,
+                    lanThi,
+                    txtDiem.getText().trim())) {
+                xoaForm();
+                capNhatSoLuong();
+            }
+        });
+
+        btnSua.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Chọn dòng cần sửa!", "Cảnh báo",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            int mr = table.convertRowIndexToModel(row);
+            int maDiem = (int) tableModel.getValueAt(mr, 0);
+            MonHoc mh  = (MonHoc) cmbMonHoc.getSelectedItem();
+            if (controller.suaDiem(maDiem,
                     mh != null ? mh.getMaMH() : null,
                     txtDiem.getText().trim())) {
-                txtDiem.setText("");
+                xoaForm();
                 capNhatSoLuong();
             }
         });
@@ -174,34 +216,32 @@ public class DiemSoPanel extends JPanel {
                     JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            // Lấy index thực trong model (vì bảng có thể đang lọc)
-            int modelRow = table.convertRowIndexToModel(row);
-            controller.xoaDiem((int) tableModel.getValueAt(modelRow, 0));
+            int mr = table.convertRowIndexToModel(row);
+            controller.xoaDiem((int) tableModel.getValueAt(mr, 0));
+            xoaForm();
             capNhatSoLuong();
         });
     }
 
-    /** Lọc bảng theo nội dung txtTimKiem */
+    private void xoaForm() {
+        txtMaSV.setText("");
+        txtLanThi.setText("1");
+        txtDiem.setText("");
+        table.clearSelection();
+    }
+
     private void applyFilter() {
         String text = txtTimKiem.getText().trim();
-        if (text.isEmpty()) {
-            sorter.setRowFilter(null);
-        } else {
-            // Lọc trên tất cả các cột (case-insensitive)
-            sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
-        }
+        sorter.setRowFilter(text.isEmpty() ? null : RowFilter.regexFilter("(?i)" + text));
         capNhatSoLuong();
     }
 
-    /** Cập nhật nhãn số lượng bản ghi đang hiển thị */
     public void capNhatSoLuong() {
-        int hienThi = table.getRowCount();
+        int hienThi  = table.getRowCount();
         int tongCong = tableModel.getRowCount();
-        if (hienThi == tongCong) {
-            lblKetQua.setText("Tổng: " + tongCong + " bản ghi");
-        } else {
-            lblKetQua.setText("Hiển thị: " + hienThi + " / " + tongCong + " bản ghi");
-        }
+        lblKetQua.setText(hienThi == tongCong
+            ? "Tổng: " + tongCong + " bản ghi"
+            : "Hiển thị: " + hienThi + " / " + tongCong + " bản ghi");
     }
 
     private JButton taoNut(String text, Color color) {

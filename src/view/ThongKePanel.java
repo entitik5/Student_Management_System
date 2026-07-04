@@ -5,7 +5,6 @@ import dao.DiemSoDAO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
@@ -14,29 +13,25 @@ public class ThongKePanel extends JPanel {
 
     private DiemSoDAO diemDAO;
 
-    // ── Tab Theo Khoa ────────────────────────────────
     private JComboBox<String>    cmbKhoa;
     private DefaultTableModel    modelKhoa;
     private JLabel               lblTongKhoa;
     private JTextField           txtTimKhoa;
 
-    // ── Tab Theo Lớp ────────────────────────────────
     private JComboBox<String>    cmbLop;
     private DefaultTableModel    modelLop;
     private JLabel               lblTongLop;
     private JTextField           txtTimLop;
 
-    // ── Tab Theo Học lực ────────────────────────────
     private JComboBox<String>    cmbHocLuc;
     private DefaultTableModel    modelHL;
     private JLabel               lblTongHL;
     private JTextField           txtTimHL;
 
-    private static final String[] XEP_LOAI = {"A+","A","A-","B+","B","B-","C+","C","D+","D","F"};
-    private static final String[] HOC_LUC_NHOM = {
-        "Xuất sắc","Giỏi","Giỏi","Khá","Khá","Khá","Trung bình","Trung bình","Yếu","Yếu","Không đạt"
-    };
-    private static final String[] TABLE_COLS = {"STT","Mã SV","Họ tên","Lớp","Khoa","Điểm TB","Xếp loại"};
+    private javax.swing.Timer    debounceTimer;
+
+    private static final String[] XEP_LOAI   = {"A+","A","A-","B+","B","B-","C+","C","D+","D","F"};
+    private static final String[] TABLE_COLS  = {"STT","Mã SV","Họ tên","Lớp","Khoa","Điểm TB","Xếp loại"};
 
     public ThongKePanel() {
         diemDAO = new DiemSoDAO();
@@ -56,9 +51,17 @@ public class ThongKePanel extends JPanel {
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(new Font("Arial", Font.BOLD, 13));
 
-        tabs.addTab("Theo Khoa",     buildTabKhoa());
-        tabs.addTab("Theo Lớp",      buildTabLop());
-        tabs.addTab("Theo Học lực",  buildTabHocLuc());
+        tabs.addTab("Theo Khoa",    buildTabKhoa());
+        tabs.addTab("Theo Lớp",     buildTabLop());
+        tabs.addTab("Theo Học lực", buildTabHocLuc());
+
+        // Chỉ load tab đang active, tránh query 3 lần khi khởi tạo
+        tabs.addChangeListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if      (idx == 0) taiKhoa();
+            else if (idx == 1) taiLop();
+            else if (idx == 2) taiHocLuc();
+        });
 
         add(tabs, BorderLayout.CENTER);
 
@@ -70,18 +73,14 @@ public class ThongKePanel extends JPanel {
         add(south, BorderLayout.SOUTH);
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  TAB 1 — THEO KHOA
-    // ══════════════════════════════════════════════════════════
+    // ── TAB 1 ──────────────────────────────────────────────────
     private JPanel buildTabKhoa() {
         JPanel panel = new JPanel(new BorderLayout(5, 8));
         panel.setBackground(new Color(245, 247, 250));
         panel.setBorder(new EmptyBorder(10, 5, 5, 5));
 
-        // Thanh lọc + tìm kiếm
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         toolbar.setBackground(new Color(245, 247, 250));
-
         toolbar.add(boldLabel("Khoa:"));
         cmbKhoa = new JComboBox<>();
         cmbKhoa.setFont(new Font("Arial", Font.PLAIN, 13));
@@ -89,45 +88,40 @@ public class ThongKePanel extends JPanel {
         cmbKhoa.addItem("-- Tất cả khoa --");
         diemDAO.layDanhSachKhoa().forEach(cmbKhoa::addItem);
         toolbar.add(cmbKhoa);
-
         toolbar.add(Box.createHorizontalStrut(10));
-        toolbar.add(boldLabel(""));
         txtTimKhoa = searchField();
         toolbar.add(txtTimKhoa);
-
-        JButton btnXoa = xoaBtn();
-        btnXoa.addActionListener(e -> txtTimKhoa.setText(""));
-        toolbar.add(btnXoa);
-
+        JButton bx = xoaBtn(); bx.addActionListener(e -> txtTimKhoa.setText(""));
+        toolbar.add(bx);
         lblTongKhoa = countLabel();
         toolbar.add(lblTongKhoa);
         panel.add(toolbar, BorderLayout.NORTH);
 
-        // Bảng
         modelKhoa = buildModel();
-        JTable table = buildTable(modelKhoa);
-
         JPanel wrapper = titledPanel("Danh sách sinh viên theo khoa");
-        wrapper.add(new JScrollPane(table));
+        wrapper.add(new JScrollPane(buildTable(modelKhoa)));
         panel.add(wrapper, BorderLayout.CENTER);
 
-        // Sự kiện
         cmbKhoa.addActionListener(e -> taiKhoa());
         txtTimKhoa.getDocument().addDocumentListener(dl(() -> taiKhoa()));
-
-        taiKhoa();
         return panel;
     }
 
     private void taiKhoa() {
-        String khoa = cmbKhoa.getSelectedIndex() == 0 ? null : (String) cmbKhoa.getSelectedItem();
-        List<Object[]> ds = diemDAO.layDanhSachSinhVienDiem(khoa, null, null, txtTimKhoa.getText());
-        renderTable(modelKhoa, ds, lblTongKhoa);
+        String khoa   = cmbKhoa.getSelectedIndex() == 0 ? null : (String) cmbKhoa.getSelectedItem();
+        String tuKhoa = txtTimKhoa.getText();
+        new SwingWorker<List<Object[]>, Void>() {
+            @Override protected List<Object[]> doInBackground() {
+                return diemDAO.layDanhSachSinhVienDiem(khoa, null, null, tuKhoa);
+            }
+            @Override protected void done() {
+                try { renderTable(modelKhoa, get(), lblTongKhoa); }
+                catch (Exception ex) { ex.printStackTrace(); }
+            }
+        }.execute();
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  TAB 2 — THEO LỚP
-    // ══════════════════════════════════════════════════════════
+    // ── TAB 2 ──────────────────────────────────────────────────
     private JPanel buildTabLop() {
         JPanel panel = new JPanel(new BorderLayout(5, 8));
         panel.setBackground(new Color(245, 247, 250));
@@ -135,7 +129,6 @@ public class ThongKePanel extends JPanel {
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         toolbar.setBackground(new Color(245, 247, 250));
-
         toolbar.add(boldLabel("Lớp:"));
         cmbLop = new JComboBox<>();
         cmbLop.setFont(new Font("Arial", Font.PLAIN, 13));
@@ -143,43 +136,40 @@ public class ThongKePanel extends JPanel {
         cmbLop.addItem("-- Tất cả lớp --");
         diemDAO.layDanhSachLop().forEach(cmbLop::addItem);
         toolbar.add(cmbLop);
-
         toolbar.add(Box.createHorizontalStrut(10));
-        toolbar.add(boldLabel(""));
         txtTimLop = searchField();
         toolbar.add(txtTimLop);
-
-        JButton btnXoa = xoaBtn();
-        btnXoa.addActionListener(e -> txtTimLop.setText(""));
-        toolbar.add(btnXoa);
-
+        JButton bx = xoaBtn(); bx.addActionListener(e -> txtTimLop.setText(""));
+        toolbar.add(bx);
         lblTongLop = countLabel();
         toolbar.add(lblTongLop);
         panel.add(toolbar, BorderLayout.NORTH);
 
         modelLop = buildModel();
-        JTable table = buildTable(modelLop);
-
         JPanel wrapper = titledPanel("Danh sách sinh viên theo lớp");
-        wrapper.add(new JScrollPane(table));
+        wrapper.add(new JScrollPane(buildTable(modelLop)));
         panel.add(wrapper, BorderLayout.CENTER);
 
         cmbLop.addActionListener(e -> taiLop());
         txtTimLop.getDocument().addDocumentListener(dl(() -> taiLop()));
-
-        taiLop();
         return panel;
     }
 
     private void taiLop() {
-        String lop = cmbLop.getSelectedIndex() == 0 ? null : (String) cmbLop.getSelectedItem();
-        List<Object[]> ds = diemDAO.layDanhSachSinhVienDiem(null, lop, null, txtTimLop.getText());
-        renderTable(modelLop, ds, lblTongLop);
+        String lop    = cmbLop.getSelectedIndex() == 0 ? null : (String) cmbLop.getSelectedItem();
+        String tuKhoa = txtTimLop.getText();
+        new SwingWorker<List<Object[]>, Void>() {
+            @Override protected List<Object[]> doInBackground() {
+                return diemDAO.layDanhSachSinhVienDiem(null, lop, null, tuKhoa);
+            }
+            @Override protected void done() {
+                try { renderTable(modelLop, get(), lblTongLop); }
+                catch (Exception ex) { ex.printStackTrace(); }
+            }
+        }.execute();
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  TAB 3 — THEO HỌC LỰC
-    // ══════════════════════════════════════════════════════════
+    // ── TAB 3 ──────────────────────────────────────────────────
     private JPanel buildTabHocLuc() {
         JPanel panel = new JPanel(new BorderLayout(5, 8));
         panel.setBackground(new Color(245, 247, 250));
@@ -187,7 +177,6 @@ public class ThongKePanel extends JPanel {
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         toolbar.setBackground(new Color(245, 247, 250));
-
         toolbar.add(boldLabel("Xếp loại:"));
         cmbHocLuc = new JComboBox<>();
         cmbHocLuc.setFont(new Font("Arial", Font.PLAIN, 13));
@@ -195,62 +184,52 @@ public class ThongKePanel extends JPanel {
         cmbHocLuc.addItem("Tất cả");
         for (String xl : XEP_LOAI) cmbHocLuc.addItem(xl);
         toolbar.add(cmbHocLuc);
-
-        // Tóm tắt học lực nhóm
-        JLabel lblNhom = new JLabel("  (A+→A-: Giỏi/Xuất sắc | B: Khá | C: TB | D: Yếu | F: Không đạt)");
+        JLabel lblNhom = new JLabel("  (A+→A-: Giỏi/XS | B: Khá | C: TB | D: Yếu | F: Không đạt)");
         lblNhom.setFont(new Font("Arial", Font.ITALIC, 11));
         lblNhom.setForeground(Color.GRAY);
         toolbar.add(lblNhom);
-
         toolbar.add(Box.createHorizontalStrut(10));
-        toolbar.add(boldLabel(""));
         txtTimHL = searchField();
         toolbar.add(txtTimHL);
-
-        JButton btnXoa = xoaBtn();
-        btnXoa.addActionListener(e -> txtTimHL.setText(""));
-        toolbar.add(btnXoa);
-
+        JButton bx = xoaBtn(); bx.addActionListener(e -> txtTimHL.setText(""));
+        toolbar.add(bx);
         lblTongHL = countLabel();
         toolbar.add(lblTongHL);
         panel.add(toolbar, BorderLayout.NORTH);
 
         modelHL = buildModel();
-        JTable table = buildTable(modelHL);
-
         JPanel wrapper = titledPanel("Danh sách sinh viên theo học lực");
-        wrapper.add(new JScrollPane(table));
+        wrapper.add(new JScrollPane(buildTable(modelHL)));
         panel.add(wrapper, BorderLayout.CENTER);
 
         cmbHocLuc.addActionListener(e -> taiHocLuc());
         txtTimHL.getDocument().addDocumentListener(dl(() -> taiHocLuc()));
-
-        taiHocLuc();
         return panel;
     }
 
     private void taiHocLuc() {
-        String hl = cmbHocLuc.getSelectedIndex() == 0 ? null : (String) cmbHocLuc.getSelectedItem();
-        List<Object[]> ds = diemDAO.layDanhSachSinhVienDiem(null, null, hl, txtTimHL.getText());
-        renderTable(modelHL, ds, lblTongHL);
+        String hl     = cmbHocLuc.getSelectedIndex() == 0 ? null : (String) cmbHocLuc.getSelectedItem();
+        String tuKhoa = txtTimHL.getText();
+        new SwingWorker<List<Object[]>, Void>() {
+            @Override protected List<Object[]> doInBackground() {
+                return diemDAO.layDanhSachSinhVienDiem(null, null, hl, tuKhoa);
+            }
+            @Override protected void done() {
+                try { renderTable(modelHL, get(), lblTongHL); }
+                catch (Exception ex) { ex.printStackTrace(); }
+            }
+        }.execute();
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  HELPER — render table với STT tự động
-    // ══════════════════════════════════════════════════════════
+    // ── HELPERS ────────────────────────────────────────────────
     private void renderTable(DefaultTableModel model, List<Object[]> ds, JLabel lblTong) {
         model.setRowCount(0);
         int stt = 1;
-        for (Object[] row : ds) {
-            // row = [maSV, hoTen, tenLop, tenKhoa, diemTB, hocLuc]
+        for (Object[] row : ds)
             model.addRow(new Object[]{stt++, row[0], row[1], row[2], row[3], row[4], row[5]});
-        }
         lblTong.setText("Tổng: " + ds.size() + " sinh viên");
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  HELPERS UI
-    // ══════════════════════════════════════════════════════════
     private DefaultTableModel buildModel() {
         return new DefaultTableModel(TABLE_COLS, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -267,7 +246,6 @@ public class ThongKePanel extends JPanel {
         t.setSelectionBackground(new Color(190, 215, 255));
         t.setGridColor(new Color(220, 225, 235));
         t.setShowGrid(true);
-        // Cột STT hẹp
         t.getColumnModel().getColumn(0).setMaxWidth(50);
         t.getColumnModel().getColumn(0).setMinWidth(40);
         return t;
@@ -278,8 +256,7 @@ public class ThongKePanel extends JPanel {
         p.setBackground(Color.WHITE);
         p.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(new Color(200, 210, 230)),
-            title, 0, 0,
-            new Font("Arial", Font.BOLD, 13), new Color(30, 80, 160)));
+            title, 0, 0, new Font("Arial", Font.BOLD, 13), new Color(30, 80, 160)));
         return p;
     }
 
@@ -322,13 +299,19 @@ public class ThongKePanel extends JPanel {
         return l;
     }
 
-    /** Tạo DocumentListener gọi Runnable khi text thay đổi */
     private javax.swing.event.DocumentListener dl(Runnable r) {
         return new javax.swing.event.DocumentListener() {
-            public void insertUpdate(DocumentEvent e)  { r.run(); }
-            public void removeUpdate(DocumentEvent e)  { r.run(); }
-            public void changedUpdate(DocumentEvent e) { r.run(); }
+            public void insertUpdate(DocumentEvent e)  { debounce(r); }
+            public void removeUpdate(DocumentEvent e)  { debounce(r); }
+            public void changedUpdate(DocumentEvent e) { debounce(r); }
         };
+    }
+
+    private void debounce(Runnable r) {
+        if (debounceTimer != null && debounceTimer.isRunning()) debounceTimer.stop();
+        debounceTimer = new javax.swing.Timer(400, e -> r.run());
+        debounceTimer.setRepeats(false);
+        debounceTimer.start();
     }
 
     private void lamMoi() {

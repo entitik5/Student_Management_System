@@ -21,11 +21,13 @@ public class DiemSoDAO {
     // ==================== CREATE ====================
 
     public boolean them(DiemSo d) {
-        String sql = "INSERT INTO tbl_diemso (maSV, maMH, diemSo) VALUES (?, ?, ?)";
+        String sql = "INSERT INTO tbl_diemso (maSV, maMH, lanThi, diemSo, xepLoai) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, d.getMaSV());
             ps.setString(2, d.getMaMH());
-            ps.setDouble(3, d.getDiemSo());
+            ps.setInt   (3, d.getLanThi() > 0 ? d.getLanThi() : 1);
+            ps.setDouble(4, d.getDiemSo());
+            ps.setString(5, d.getXepLoai());
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("Lỗi thêm điểm: " + e.getMessage());
@@ -74,12 +76,12 @@ public class DiemSoDAO {
 
     // ==================== UPDATE ====================
 
-    public boolean sua(DiemSo d) {
-        String sql = "UPDATE tbl_diemso SET diemSo=? WHERE maSV=? AND maMH=?";
+        public boolean sua(DiemSo d) {
+        String sql = "UPDATE tbl_diemso SET diemSo=?, xepLoai=? WHERE maDiem=?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setDouble(1, d.getDiemSo());
-            ps.setString(2, d.getMaSV());
-            ps.setString(3, d.getMaMH());
+            ps.setString(2, d.getXepLoai());
+            ps.setInt   (3, d.getMaDiem());
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("Lỗi sửa điểm: " + e.getMessage());
@@ -102,66 +104,51 @@ public class DiemSoDAO {
 
     // ==================== THỐNG KÊ ====================
 
-    /**
-     * Lấy danh sách sinh viên kèm điểm TB, lớp, khoa.
-     * Lọc theo: tenKhoa (null = tất cả), tenLop (null = tất cả), hocLuc (null = tất cả), tuKhoa tìm kiếm.
-     * Trả về: [maSV, hoTen, tenLop, tenKhoa, diemTB(String), hocLuc]
-     */
     public List<Object[]> layDanhSachSinhVienDiem(
             String filterKhoa, String filterLop, String filterHocLuc, String tuKhoa) {
 
         List<Object[]> ds = new ArrayList<>();
         StringBuilder sql = new StringBuilder(
-            "SELECT sv.maSV, " +
-            "       CONVERT(sv.hoTen  USING utf8mb4) COLLATE utf8mb4_unicode_ci AS hoTen, " +
-            "       CONVERT(l.tenLop  USING utf8mb4) COLLATE utf8mb4_unicode_ci AS tenLop, " +
-            "       CONVERT(k.tenKhoa USING utf8mb4) COLLATE utf8mb4_unicode_ci AS tenKhoa, " +
-            "       AVG(d.diemSo) as diemTB " +
-            "FROM tbl_diemso d " +
-            "JOIN tbl_sinhvien sv ON CONVERT(sv.maSV USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                      = CONVERT(d.maSV  USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "LEFT JOIN tbl_lophoc l ON CONVERT(l.maLop  USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                        = CONVERT(sv.maLop USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "LEFT JOIN tbl_khoa k   ON CONVERT(k.maKhoa  USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                        = CONVERT(sv.maKhoa USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "GROUP BY sv.maSV, sv.hoTen, l.tenLop, k.tenKhoa "
+            "SELECT v.maSV, v.hoTen, v.tenLop, k.tenKhoa, " +
+            "       ROUND(v.diemTB, 2) AS diemTB, v.hocLuc " +
+            "FROM v_diemtb_sinhvien v " +
+            "LEFT JOIN tbl_sinhvien sv ON sv.maSV = v.maSV " +
+            "LEFT JOIN tbl_khoa k ON k.maKhoa = sv.maKhoa " +
+            "WHERE 1=1 "
         );
 
-        // Lọc sau GROUP BY bằng HAVING hoặc WHERE phụ — dùng subquery để filter hocLuc
-        // Wrap thành subquery để có thể filter theo hocLuc
-        String inner = "SELECT * FROM (" + sql + ") AS tmp WHERE 1=1 ";
         List<Object> params = new ArrayList<>();
 
         if (filterKhoa != null && !filterKhoa.isEmpty()) {
-            inner += "AND tenKhoa = ? ";
+            sql.append("AND k.tenKhoa = ? ");
             params.add(filterKhoa);
         }
         if (filterLop != null && !filterLop.isEmpty()) {
-            inner += "AND tenLop = ? ";
+            sql.append("AND v.tenLop = ? ");
             params.add(filterLop);
         }
+        if (filterHocLuc != null && !filterHocLuc.isEmpty()) {
+            sql.append("AND v.hocLuc = ? ");
+            params.add(filterHocLuc);
+        }
         if (tuKhoa != null && !tuKhoa.trim().isEmpty()) {
-            inner += "AND (maSV LIKE ? OR hoTen LIKE ? OR tenLop LIKE ? OR tenKhoa LIKE ?) ";
+            sql.append("AND (v.maSV LIKE ? OR v.hoTen LIKE ? OR v.tenLop LIKE ? OR k.tenKhoa LIKE ?) ");
             String p = "%" + tuKhoa.trim() + "%";
             params.add(p); params.add(p); params.add(p); params.add(p);
         }
-        inner += "ORDER BY tenKhoa, tenLop, diemTB DESC";
+        sql.append("ORDER BY k.tenKhoa, v.tenLop, v.diemTB DESC ");
 
-        try (PreparedStatement ps = conn.prepareStatement(inner)) {
+        try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) ps.setObject(i + 1, params.get(i));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
-                double diemTB = rs.getDouble("diemTB");
-                String hocLuc = model.DiemSo.tinhXepLoai(diemTB);
-                // Nếu filter theo học lực thì bỏ qua hàng không khớp
-                if (filterHocLuc != null && !filterHocLuc.isEmpty() && !filterHocLuc.equals(hocLuc)) continue;
                 ds.add(new Object[]{
                     rs.getString("maSV"),
                     rs.getString("hoTen"),
                     rs.getString("tenLop")  != null ? rs.getString("tenLop")  : "",
                     rs.getString("tenKhoa") != null ? rs.getString("tenKhoa") : "",
-                    String.format("%.2f", diemTB),
-                    hocLuc
+                    String.format("%.2f", rs.getDouble("diemTB")),
+                    rs.getString("hocLuc")  != null ? rs.getString("hocLuc")  : ""
                 });
             }
         } catch (SQLException e) {
@@ -170,16 +157,13 @@ public class DiemSoDAO {
         return ds;
     }
 
-    /** Lấy danh sách tên khoa (có sinh viên có điểm) để populate combobox */
     public List<String> layDanhSachKhoa() {
         List<String> ds = new ArrayList<>();
         String sql =
-            "SELECT DISTINCT CONVERT(k.tenKhoa USING utf8mb4) COLLATE utf8mb4_unicode_ci AS tenKhoa " +
+            "SELECT DISTINCT k.tenKhoa " +
             "FROM tbl_sinhvien sv " +
-            "JOIN tbl_khoa k ON CONVERT(k.maKhoa USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                 = CONVERT(sv.maKhoa USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "JOIN tbl_diemso d ON CONVERT(d.maSV USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                   = CONVERT(sv.maSV USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
+            "JOIN tbl_khoa k ON k.maKhoa = sv.maKhoa " +
+            "JOIN tbl_diemso d ON d.maSV = sv.maSV " +
             "ORDER BY tenKhoa";
         try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             while (rs.next()) ds.add(rs.getString("tenKhoa"));
@@ -189,16 +173,13 @@ public class DiemSoDAO {
         return ds;
     }
 
-    /** Lấy danh sách tên lớp (có sinh viên có điểm) để populate combobox */
     public List<String> layDanhSachLop() {
         List<String> ds = new ArrayList<>();
         String sql =
-            "SELECT DISTINCT CONVERT(l.tenLop USING utf8mb4) COLLATE utf8mb4_unicode_ci AS tenLop " +
+            "SELECT DISTINCT l.tenLop " +
             "FROM tbl_sinhvien sv " +
-            "JOIN tbl_lophoc l ON CONVERT(l.maLop  USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                   = CONVERT(sv.maLop USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "JOIN tbl_diemso d ON CONVERT(d.maSV USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
-            "                   = CONVERT(sv.maSV USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
+            "JOIN tbl_lophoc l ON l.maLop = sv.maLop " +
+            "JOIN tbl_diemso d ON d.maSV = sv.maSV " +
             "ORDER BY tenLop";
         try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             while (rs.next()) ds.add(rs.getString("tenLop"));
@@ -212,10 +193,11 @@ public class DiemSoDAO {
 
     private DiemSo mapRow(ResultSet rs) throws SQLException {
         DiemSo d = new DiemSo();
-        d.setMaDiem(rs.getInt("maDiem"));
-        d.setMaSV  (rs.getString("maSV"));
-        d.setMaMH  (rs.getString("maMH"));
-        d.setDiemSo(rs.getDouble("diemSo"));
+        d.setMaDiem (rs.getInt   ("maDiem"));
+        d.setMaSV   (rs.getString("maSV"));
+        d.setMaMH   (rs.getString("maMH"));
+        d.setLanThi (rs.getInt   ("lanThi"));
+        d.setDiemSo (rs.getDouble("diemSo"));
         return d;
     }
 }

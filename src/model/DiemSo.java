@@ -5,75 +5,57 @@ public class DiemSo {
     private int    maDiem;
     private String maSV;
     private String maMH;
+    private int    lanThi;
     private double diemSo;
     private String xepLoai;
-
-    // ==================== CONSTRUCTOR ====================
 
     public DiemSo() {}
 
     public DiemSo(String maSV, String maMH, double diemSo) {
         this.maSV    = maSV;
         this.maMH    = maMH;
+        this.lanThi  = 1;
         this.diemSo  = diemSo;
         this.xepLoai = tinhXepLoai(diemSo);
     }
 
-    public DiemSo(int maDiem, String maSV, String maMH, double diemSo) {
+    public DiemSo(String maSV, String maMH, int lanThi, double diemSo) {
+        this.maSV    = maSV;
+        this.maMH    = maMH;
+        this.lanThi  = lanThi;
+        this.diemSo  = diemSo;
+        this.xepLoai = tinhXepLoai(diemSo);
+    }
+
+    public DiemSo(int maDiem, String maSV, String maMH, int lanThi, double diemSo) {
         this.maDiem  = maDiem;
         this.maSV    = maSV;
         this.maMH    = maMH;
+        this.lanThi  = lanThi;
         this.diemSo  = diemSo;
         this.xepLoai = tinhXepLoai(diemSo);
     }
 
-    // ==================== GETTERS & SETTERS ====================
+    public int    getMaDiem()              { return maDiem; }
+    public void   setMaDiem(int maDiem)    { this.maDiem = maDiem; }
 
-    public int  getMaDiem()
-    { 
-        return maDiem; 
-    }
-    public void setMaDiem(int maDiem)   
-    { 
-        this.maDiem = maDiem; 
-    }
+    public String getMaSV()                { return maSV; }
+    public void   setMaSV(String maSV)     { this.maSV = maSV; }
 
-    public String getMaSV()             
-    { 
-        return maSV; 
-    }
-    public void   setMaSV(String maSV)  
-    { 
-        this.maSV = maSV; 
-    }
+    public String getMaMH()                { return maMH; }
+    public void   setMaMH(String maMH)     { this.maMH = maMH; }
 
-    public String getMaMH()             
-    { 
-        return maMH; 
-    }
-    public void   setMaMH(String maMH)  
-    { 
-        this.maMH = maMH; 
-    }
+    public int    getLanThi()              { return lanThi; }
+    public void   setLanThi(int lanThi)    { this.lanThi = lanThi; }
 
-    public double getDiemSo()               
-    { 
-        return diemSo; 
-    }
-    public void   setDiemSo(double diemSo)  
-    {
+    public double getDiemSo()              { return diemSo; }
+    public void   setDiemSo(double diemSo) {
         this.diemSo  = diemSo;
         this.xepLoai = tinhXepLoai(diemSo);
     }
 
-    public String getXepLoai()  
-    { 
-        return xepLoai; 
-    }
+    public String getXepLoai()             { return xepLoai; }
 
-    // ==================== METHODS ====================
-
-    //Xếp loại học lực
     public static String tinhXepLoai(double diem) {
         if (diem >= 9.5) return "A+";
         if (diem >= 9.0) return "A";
